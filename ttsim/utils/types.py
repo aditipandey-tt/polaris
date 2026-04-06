@@ -2,13 +2,28 @@
 # SPDX-FileCopyrightText: (C) 2025 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 from typing import NewType, NamedTuple, Union
-from enum import Enum, StrEnum, auto
+from enum import Enum, auto
 from dataclasses import dataclass
 from collections import namedtuple
 
 ###################################################################################
 # Useful Types
 ###################################################################################
+
+try:
+    from enum import StrEnum
+except ImportError:
+    class StrEnum(str, Enum):
+        """
+        Polyfill for StrEnum to support Python 3.10 and earlier.
+        """
+        def __str__(self) -> str:
+            return str(self.value)
+
+        def __format__(self, format_spec: str) -> str:
+            return str(self.value).__format__(format_spec)
+
+
 
 class FrameworkType(Enum):
     ONNX    = auto()
