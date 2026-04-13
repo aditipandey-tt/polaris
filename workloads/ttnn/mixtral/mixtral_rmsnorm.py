@@ -38,24 +38,46 @@ class RMSNorm():
         self.sharded_output_config = sharded_output_config
         self.ccl_topology = ccl_topology
         self.compute_kernel_config_hifi2 = ttnn.MathFidelity.HiFi2
-        self.weight = ttnn._rand(shape=(1, 1, 32, 128), device=device, dtype=self.weight_dtype)
+        self.weight = ttnn._rand(shape=(1, 1, 32, self.dim), device=device, dtype=self.weight_dtype)
         self.bias = None
 
     def __call__(self, x, mode="decode"):
         rms = ttnn.layer_norm(x, weight=self.weight, epsilon=self.eps, axis=-1)
         if self.is_distributed or True:
             from ttsim.front.functional.ccl import all_reduce
-            rms = all_reduce(rms, mesh_device=self.device, dim=3);
-            rms = ttnn.mean(rms, dim=3, keepdim=True)
-        if len(rms.shape) == 3:
-            rms = ttnn.reshape(rms, (rms.shape[0], rms.shape[1], rms.shape[2], 1))
+            all_reduce(rms, mesh_device=self.device, dim=3);
+            rms = ttnn.reshape(rms, (x.shape[0], x.shape[1], x.shape[2], x.shape[3]))
 
         normalized = ttnn.div(x, rms)
+        normalized = ttnn.multiply(normalized, self.weight)
         normalized = ttnn.repeat(normalized, (1, 1, 1, self.args.num_experts))
-        weight_tensor = self.weight
-        weight_tensor = ttnn.reshape(weight_tensor, (1, 1, 1, self.dim))
-        normalized = ttnn.multiply(normalized, weight_tensor)
+         #weight_tensor = self.weight
+       # weight_tensor = ttnn.reshape(weight_tensor, (1, 1, 1, self.dim))
+        # normalized = ttnn.multiply(normalized, weight_tensor)
 
         if self.bias is not None:
             normalized = ttnn.add(normalized, self.bias)
         return normalized
+
+def run_rms_ccl(wln, device, gcfg):
+    # Sab kuch 4 spaces ke gap par shuru hoga
+    class Args:
+        def __init__(self):
+            self.dim = 4096
+            self.num_experts = 8
+
+    args = Args()
+
+    # Initialize RMSNorm class
+    layer = RMSNorm(
+        device=device, 
+        dim=args.dim, 
+        args=args,
+        is_distributed=True
+    )
+
+    # Create dummy input tensor
+    inputs = ttnn._rand(shape=[1, 1, 32, args.dim], device=device, dtype=ttnn.bfloat16)
+
+    # Forward pass
+    return layer(inputs, mode="decode")

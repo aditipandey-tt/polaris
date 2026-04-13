@@ -59,4 +59,7 @@ op_rsrc_spec:
              Tanh, Tile, TorchGather, Transpose, Trilu,
              Unsqueeze, Upsample,
              VoxelPooling,
-             Where,]
+             Where, all_reduce, ALL_REDUCE]
+
+wl2archmapping:
+  mixtral_ccl: n300

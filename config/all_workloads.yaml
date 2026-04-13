@@ -171,3 +171,16 @@ workloads:
     instances:
       vit_b16: { bs: 1, model_name: vit-b16 }
       vit_base_224x224: { bs: 1, model_name: vit-b16 }
+
+  - api: TTNN
+    name: mixtral_ccl
+    basedir: workloads/ttnn/mixtral
+    module : run_mixtral_ccl@mixtral_moe_ccl.py  # File name match hona chahiye
+    instances:
+      mixtral_ccl: { bs: 1 }
+  - api: TTNN
+    name: mixtral_rms_ccl
+    basedir: workloads/ttnn/mixtral
+    module : run_rms_ccl@mixtral_rmsnorm.py # ClassName@FileName format
+    instances:
+      mixtral_rms_ccl: { bs: 1 }

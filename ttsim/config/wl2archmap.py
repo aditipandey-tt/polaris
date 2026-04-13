@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field
 from ttsim.utils.common import parse_yaml
 from ttsim.utils.types import validate_datatype
 
-type LayerName = str
-type LayerSequence = List[LayerName]
-type PipeName = str
-type TypeName = str
+LayerName = str
+LayerSequence = List[LayerName]
+PipeName = str
+TypeName = str
 
 
 class WL2ArchDatatypes(BaseModel):

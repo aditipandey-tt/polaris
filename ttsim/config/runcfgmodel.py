@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from ttsim.utils.types import validate_datatype
 
-type TYPE_SWEEP = Literal['all', 'first-parent']
-type TYPE_RUN = Literal['inference', 'training']
-type TYPE_LOGLEVEL = Literal['critical', 'error', 'warning', 'info', 'debug']
-type TYPE_OUTPUTFORMAT = Literal['json', 'yaml', 'pickle', 'none']
-type TYPE_frequency = Tuple[int, int, int]
-type TYPE_batchsize = Tuple[int, int, int]
+TYPE_SWEEP = Literal['all', 'first-parent']
+TYPE_RUN = Literal['inference', 'training']
+TYPE_LOGLEVEL = Literal['critical', 'error', 'warning', 'info', 'debug']
+TYPE_OUTPUTFORMAT = Literal['json', 'yaml', 'pickle', 'none']
+TYPE_frequency = Tuple[int, int, int]
+TYPE_batchsize = Tuple[int, int, int]
 
 class PolarisRunConfig(BaseModel, extra='forbid'):
     # Title is used only in the run config, it is not a command line attribute of polaris
@@ -132,5 +132,4 @@ class PolarisRunConfig(BaseModel, extra='forbid'):
 
 
 
-
-type TYPE_GITHASH = Union[str, None]
+TYPE_GITHASH = Union[str, None]
