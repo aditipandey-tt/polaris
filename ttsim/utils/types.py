@@ -2,13 +2,24 @@
 # SPDX-FileCopyrightText: (C) 2025 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 from typing import NewType, NamedTuple, Union
-from enum import Enum, StrEnum, auto
+from enum import Enum, auto
 from dataclasses import dataclass
 from collections import namedtuple
 
 ###################################################################################
 # Useful Types
 ###################################################################################
+
+try:
+    from enum import StrEnum
+except ImportError:
+    # Agar Python 3.11 se purana hai (3.10), toh hum khud StrEnum bana dete hain
+    class StrEnum(str, Enum):
+        def __str__(self) -> str:
+            return str(self.value)
+
+
+
 
 class FrameworkType(Enum):
     ONNX    = auto()

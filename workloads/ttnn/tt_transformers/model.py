@@ -151,12 +151,15 @@ class Transformer():
         if get_last_token != -1:
             pass #x = ttnn.slice(x, (0, 0, get_last_token, 0), (1, 1, get_last_token + 32, x.shape[-1]))
 
+        import ttsim.front.functional.ccl as ccl
+
         # Output norm
         x = self.norm(x, mode=mode)
 
         # if mode == "prefill" and self.model_config["LM_HEAD_INPUT_MEMCFG"].is_sharded():
         #     x = ttnn.interleaved_to_sharded(x, self.model_config["LM_HEAD_INPUT_MEMCFG"])
 
+        x = ccl.all_reduce(x, self.mesh_device, dim=3)
         x = self.lm_head(x)
 
         if mode == "prefill":
@@ -217,3 +220,4 @@ class Transformer():
             get_last_token=get_last_token,
             kv_cache=kv_cache,
         )
+ 

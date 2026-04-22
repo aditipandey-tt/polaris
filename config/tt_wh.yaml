@@ -49,8 +49,6 @@ packages:
     -   name: Wormhole
         instances:
         -   name: n150
-            # operator_lookup_file can be a local path or LFC path starting with lfc://
-            operator_lookup_file: lfc://hlm-lut/whb0_n150_lut.yaml
             ipgroups:
             -   ipname: tensix
                 iptype: compute
@@ -74,6 +72,31 @@ packages:
             -   ipname: gddr6
                 iptype: memory
                 num_units: 12
+        -   name: n800
+            ipgroups:
+            -   ipname: tensix
+                iptype: compute
+                num_units   : 512
+                ramp_penalty: 400
+                ip_overrides:
+                    pipes.matrix.freq_MHz: 1000
+                    pipes.vector.freq_MHz: 1000
+            -   ipname: gddr6
+                iptype: memory
+                num_units: 48
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #from https://tenstorrent.com/hardware/wormhole
 # Specification,     n150s,     n150d,    n300s,    n300d
@@ -108,3 +131,4 @@ packages:
 #     Connectivity                : 2x Warp 100 Bridge; 2x QSFP-DD 200G (Active)*
 #     External Power              : 1x 4+4-pin EPS12V
 #     System Interface PCI Express: 4.0x16 PCI Express
+ 

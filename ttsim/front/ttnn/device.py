@@ -107,11 +107,32 @@ class Device:
         gg = WorkloadGraph('xxx')
         for _,t in self.tensors.items():
             gg.add_tensor(t)
+        from ttsim.ops.tensor import SimTensor
         for _,o in self.ops.items():
+            for out_name in o.outList:
+                if out_name not in self.tensors:
+                    # Create placeholder tensor
+                    shape = [1]
+                    dtype = 'float32'
+                    # Try to infer from input
+                    if o.inList and len(o.inList) > 0:
+                        first_input = o.inList[0]
+                        if first_input in self.tensors:
+                            input_tensor = self.tensors[first_input]
+                            if hasattr(input_tensor, 'shape'):
+                                shape = input_tensor.shape
+                            if hasattr(input_tensor, 'dtype'):
+                                dtype = input_tensor.dtype
+                    out_tensor = SimTensor({
+                        'name': out_name,
+                        'shape': shape,
+                        'dtype': dtype
+                    })
+                    self.tensors[out_name] = out_tensor
+                    gg.add_tensor(out_tensor)
             gg.add_op(o)
         gg.construct_graph()
         return gg
-
     def __str__(self):
         return f"(Device: {self.args})"
 

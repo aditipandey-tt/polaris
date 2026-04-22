@@ -662,7 +662,20 @@ def reshape(tensor, shape, padded_shape=None, memory_config=None, pad_value=None
     should_track = (mode == ExecutionMode.TRACK_ONLY or mode == ExecutionMode.EXECUTE_AND_TRACK)
 
     if should_track:
-        _tracker.track_reshape(tensor.logical_shape()._shape, shape._shape)
+       # _tracker.track_reshape(tensor.logical_shape()._shape, shape._shape)
+        in_shape_raw = tensor.logical_shape()
+        # Agar object hai toh ._shape lo, varna list hi rehne do
+        in_s = in_shape_raw._shape if hasattr(in_shape_raw, '_shape') else in_shape_raw
+        
+        out_s = shape._shape if hasattr(shape, '_shape') else shape
+        
+        _tracker.track_reshape(in_s, out_s)
+
+
+
+
+
+
 
     # Preserve data if available (reshape doesn't change data, just view)
     output_data = None
@@ -1502,7 +1515,17 @@ def ttnn_reshape(tensor, shape, arg3=None, memory_config=None, sub_core_grids=No
     else:
         raise TypeError(f"ttnn_reshape: shape must be list, tuple, or Shape, got {type(shape)}")
 
-    logical_vol = tensor.logical_shape().volume()
+#   logical_vol = tensor.logical_shape().volume()
+    try:
+       if isinstance(tensor.logical_shape(), list):
+           logical_vol = 1
+           for dim in tensor.logical_shape():
+               logical_vol *= dim
+       else:
+           logical_vol = tensor.logical_shape().volume()
+    except AttributeError:
+        # Fallback agar logical_shape hi missing ho
+        logical_vol = np.prod(tensor.shape)
     storage_vol = (
         tensor.physical_volume()
         if hasattr(tensor, "physical_volume")
@@ -1605,7 +1628,13 @@ def ttnn_reshape(tensor, shape, arg3=None, memory_config=None, sub_core_grids=No
                 sub_core_grids,
             )
             if should_track:
-                _tracker.track_reshape(tensor.logical_shape()._shape, logical_list)
+        #        _tracker.track_reshape(tensor.logical_shape()._shape, logical_list)
+                in_shape_obj = tensor.logical_shape()
+                actual_in_shape = in_shape_obj._shape if hasattr(in_shape_obj, '_shape') else in_shape_obj
+                _tracker.track_reshape(actual_in_shape, logical_list)
+               
+
+
             return out_rm
 
         if should_execute:
@@ -1700,7 +1729,9 @@ def permute_op(input_tensor, dims, memory_config=None):
     """
     assert input_tensor.device is not None, "permute_op requires input_tensor on device"
     perm = list(dims)
-    in_shape = list(input_tensor.logical_shape()._shape)
+    logical_s = input_tensor.logical_shape()
+    in_shape = list(logical_s._shape if hasattr(logical_s, '_shape') else logical_s)
+    #in_shape = list(input_tensor.logical_shape()._shape)
     if len(perm) != len(in_shape):
         raise ValueError(
             f"permute_op: len(dims)={len(perm)} must match input rank {len(in_shape)}"

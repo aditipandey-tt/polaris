@@ -6,9 +6,9 @@ from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-type TypeFrequency = float
-type TypeTimeMS    = float
-type TypeMemsizeGB = float
+TypeFrequency = float
+TypeTimeMS    = float
+TypeMemsizeGB = float
 
 class PYDWlMapDataSpecValidator(BaseModel, extra='forbid'):
     global_type: Optional[str] = None
@@ -109,14 +109,14 @@ AnyWorkload = Annotated[PYDWorkloadTTSIMModelValidator | PYDWorkloadONNXModelVal
 class PYDWorkloadListValidator(BaseModel):
     workloads: List[AnyWorkload]
 
-type TypeDeviceName = str
-type TypePipeName = str
-type TypePrecision = str
-type TypeOpType = str
-type TypeOpClass = str
-type TypeResourceName = str
-type TypeDomain = str
-type TypeInstrName = str
+TypeDeviceName = str
+TypePipeName = str
+TypePrecision = str
+TypeOpType = str
+TypeOpClass = str
+TypeResourceName = str
+TypeDomain = str
+TypeInstrName = str
 
 # Option 1 : Direct representation of output CSV
 class TTSimHLWlDevRunOpCSVPerfStats(BaseModel, extra='forbid'):

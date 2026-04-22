@@ -36,29 +36,35 @@ op_fusion_spec:
   - [Conv, BatchNormalization, Sigmoid, Mul]
   - [Conv, BatchNormalization, Mul]
   - [Conv, BatchNormalization]
-  - [Conv, GroupNormalization, Relu]
-  - [Conv, GroupNormalization]
 
 op_rsrc_spec:
   compute:
-    matrix: [Matmul, Conv, ConvTranspose, Gemm, MultiheadAttention]
+    matrix: [Matmul, Conv, ConvTranspose, Gemm]
     vector: [Add, And, ArgMax, AveragePool,
              BatchNormalization,
              Cast, Clip, Concat, Constant, ConstantOfShape, Cos, CumSum,
              DequantizeLinear, Div, Dropout,
              Equal, Erf, Exp, Expand,
-             Flatten, Fold,
-             Gather, GatherND, Gelu, GlobalAveragePool, GridSample, Greater, GroupNormalization,
-             HardSigmoid, Hardswish,
-             Identity, If, IsNaN,
+             Flatten,
+             Gather, GatherND, Gelu, GlobalAveragePool, Greater,
+             Hardswish,
+             Identity, IsNaN,
              LayerNormalization, LeakyRelu, Log,
-             Max, MaxPool, Mean, Min, Mish, Mul,
-             Neg, NonMaxSuppression, NonZero,
+             MaxPool, Mean, Mish, Mul,
+             Neg, NonMaxSuppression,
              Pad, Permute, Pow,
              QuantizeLinear,
-             Reciprocal, ReduceMax, ReduceMean, ReduceMin, ReduceProd, ReduceSum, Relu, Reshape, Resize,
-             ScatterND, ScatterElements, Shape, Sigmoid, Sin, Slice, Softmax, SoftmaxCrossEntropyLoss, Softplus, Split, Sqrt, Squeeze, Sub, Sum,
-             Tanh, Tile, Tilize, TilizeWithValPadding, TopK, TorchGather, Transpose, Trilu,
-             Unsqueeze, Untilize, UntilizeWithValUnpadding, Upsample,
+             Reciprocal, ReduceMax, ReduceMean, ReduceSum, Relu, Reshape, Resize,
+             Shape, Sigmoid, Sin, Slice, Softmax, Softplus, Split, Sqrt, Squeeze, Sub, Sum,
+             Tanh, Tile, TorchGather, Transpose, Trilu,
+             Unsqueeze, Upsample,
              VoxelPooling,
-             Where]
+             Where, all_reduce, ALL_REDUCE, all_gather, ALL_GATHER ]
+
+wl2archmapping:
+  mixtral_ccl: n800
+  llama3_decode: n800   
+  llama3_8b_decode: n800
+  mixtral_e2e: n800
+  test_model_inference: n800
+ 

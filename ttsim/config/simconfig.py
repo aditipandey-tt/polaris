@@ -451,7 +451,7 @@ class MemoryBlockModel(BaseModel, extra='forbid'):
         return bw
 
 
-type BlockModelType = Union[ComputeBlockModel, MemoryBlockModel]  # type: ignore[no-redef]
+BlockModelType = Union[ComputeBlockModel, MemoryBlockModel]  # type: ignore[no-redef]
 
 class IPGroupComponentModel(BaseModel, extra='forbid'):
     ipname: str
@@ -468,7 +468,7 @@ class IPGroupMemoryModel(IPGroupComponentModel):
     size_GB: Optional[float] = None
 
 # IPBlocksModel = NewType('IPBlocksModel', BaseModel)
-type IPGroupModel = Union[IPGroupComputeModel, IPGroupMemoryModel]
+IPGroupModel = Union[IPGroupComputeModel, IPGroupMemoryModel]
 
 
 # #####################

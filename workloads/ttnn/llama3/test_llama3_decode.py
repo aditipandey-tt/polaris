@@ -5,17 +5,37 @@
 import os, sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 import ttsim.front.ttnn as ttnn
-from workloads.ttnn.tt_transformers.model import Transformer
-from workloads.ttnn.tt_transformers.model_config import ModelArgs
+from workloads.ttnn.llama3.model import Transformer
+from workloads.ttnn.llama3.model_config import ModelArgs
 from ttsim.front.ttnn.device import Device as TTNNDevice
 from loguru import logger
 from ttsim.utils.common import setup_logger
+
+# def filter_ttnn_attrs(attrs_dict):
+#     return {k: v for k, v in attrs_dict.items() if not (isinstance(v, ttnn.Tensor) or k == "layout" or k == "memory_config")}
+def create_mesh_device(single_device, num_devices=8):
+    """Create a mesh device for tensor parallelism simulation."""
+    class MeshDevice:
+        def __init__(self, device, num_devices):
+            self.device = device
+            self.num_devices = num_devices
+            self.shape = [1, num_devices]  # 1x8 mesh for tensor parallelism
+            
+        def get_num_devices(self):
+            return self.num_devices
+            
+        def __getattr__(self, name):
+            # Delegate all other attributes to the underlying device
+            return getattr(self.device, name)
+    
+    return MeshDevice(single_device, num_devices)
+
 
 def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
     assert isinstance(ttnn_device, TTNNDevice), "ttnn_device must be a TTNNDevice"
     assert isinstance(cfg, dict), "cfg must be a dictionary"
     assert isinstance(wlname, str), "wlname must be a string"
-
+    ttnn.device = ttnn_device
     model_name = cfg.get('model_name', 'llama3-8B')
     paged_attention = False
     page_params = [{"page_block_size": 32, "page_max_num_blocks": 1024}]
@@ -53,7 +73,7 @@ def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
 
     if layers is not None:
         model_args.n_layers = layers
-    state_dict = None
+    state_dict = None #model_args.load_state_dict()
 
     prompts = ["This is a test"] * model_args.max_batch_size
     encoded_prompts = [128000]
@@ -61,14 +81,15 @@ def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
     generation_length = iterations
     page_table_tt = None
     paged_attention_config = None
-
+    if not hasattr(ttnn_device, 'get_num_devices'):
+        ttnn_device.get_num_devices = lambda: 8
     # Load TTNN model
     tt_model = Transformer(
         args=model_args,
         mesh_device=ttnn_device,
         dtype=dtype,
         state_dict=state_dict,
-        weight_cache_path=None,
+        weight_cache_path=None, #model_args.weight_cache_path(dtype),
         paged_attention_config=paged_attention_config,
     )
     logger.info("Model and caches loaded.")
@@ -134,3 +155,4 @@ if __name__ == "__main__":
     ttnn_device = ttnn.open_device(device_id=0)
     run_llama3(wlname='llama3', ttnn_device=ttnn_device, cfg={'model_name': model_name, 'bs': 1})
     ttnn.close_device(ttnn_device)
+ 

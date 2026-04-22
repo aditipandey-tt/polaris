@@ -186,19 +186,42 @@ class SimTensor:
     # If caching is needed, consider using a static cache or external memoization.
     def nbytes(self, itemprec=None):
         def typesize(dtype):
+            # 1. Agar dtype object/enum hai, toh string nikaal lo
+            dtype_raw = str(getattr(dtype, 'name', dtype)).lower()
+            # Clean string (e.g., "DataType.BFLOAT16" -> "bfloat16")
+            d_str = dtype_raw.split('.')[-1]
+
+            # 2. Generic Mapping: Har model ke liye bytes ka hisaab
+            size_map = {
+                'float32': 4, 'int32': 4, 'uint32': 4,
+                'bfloat16': 2, 'float16': 2, 'uint16': 2,
+                'int8': 1, 'uint8': 1, 'bfloat8_b': 1, 'bfloat8': 1,
+                'bool': 1
+            }
+
+            # 3. Agar mapping mein mil jaye toh return karo
+            if d_str in size_map:
+                return size_map[d_str]
+
+            # 4. Fallback for numpy dtypes or others
             if isinstance(dtype, np.dtype):
                 return dtype.itemsize
-            elif isinstance(dtype, str):
-                return get_bpe(get_sim_dtype(dtype))
-            else:
-                raise TypeError(f"Unsupported dtype type: {type(dtype)}")
+            
+            # 5. Last resort: simulator helpers use karo
+            try:
+                from ttsim.ops.tensor import get_sim_dtype, get_bpe
+                return get_bpe(get_sim_dtype(d_str))
+            except:
+                # Agar kuch bhi kaam na kare, toh 2 default (safest for AI models)
+                return 2
+
         if itemprec is None:
             assert self.dtype is not None, f"SimTensor({self.name}) has no dtype to calculate nbytes"
             itemsize = typesize(self.dtype)
         else:
             itemsize = typesize(itemprec)
-        return self.nelems() * itemsize #assumes np.dtype
-
+            
+        return self.nelems() * itemsize
     def check_shape(self):
         if self.shape is None:
             return False
@@ -250,4 +273,4 @@ class SimTensor:
         return clone
 
 def make_tensor(name: str) -> SimTensor:
-    return SimTensor({'name': name, 'shape': [], 'dtype': None})
+    return SimTensor({'name': name, 'shape': [], 'dtype': None}) 

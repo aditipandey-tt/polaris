@@ -84,12 +84,6 @@ class SimOp:
         #Do Shape Inference, Update perf_stats
         shape_inf_func = opdesc['shape_inf_func']
         shape_inf_func(inT, outT, self, **kwargs)
-        for tmp in outT:
-            # NOTE: shape type is now considered to be ttsim.ops.tensor.Shape.
-            # If any shape inference function sets it to just a list or a tuple,
-            # that would break the code. Hence the shapes are intercepted here,
-            # and converted to Shape type through the set_shape() method.
-            tmp.set_shape(tmp.shape)
 
         return self.perf_stats
 
@@ -149,3 +143,74 @@ def get_tensor_broadcast_shape(shape1, shape2):
         else:
             raise ValueError(f"Shapes {shape1} and {shape2} not broadcast-compatible")
     return result[::-1]
+
+
+
+
+
+def CCLOpHandle(name, optype, in_tensor, num_devices, latency_ms, dim=3):
+    from .tensor import SimTensor
+    import copy
+
+    # 1. Generic Shape Detection
+    out_shape = copy.deepcopy(in_tensor.shape)
+    op_lower = optype.lower()
+    
+    # Bytes per element (Default 2 for bfloat16, generic handle)
+    bpe = 2 
+    if hasattr(in_tensor, 'dtype') and '32' in str(in_tensor.dtype): bpe = 4
+    # Universal dimension handling - SINGLE CHECK
+    if dim is None:
+        dim = -1  # Use last dimension
+    
+    # Handle negative indexing (Python style)
+    if dim < 0:
+        dim = len(out_shape) + dim
+    
+    # Final validation - SINGLE CHECK
+    if dim >= len(out_shape) or dim < 0:
+        print(f"[WARNING CCL] Invalid dim {dim} for shape {out_shape}, using last dimension")
+        dim = len(out_shape) - 1
+    
+    # 2. Universal Sharding Logic (Purane CCL logic ke hisaab se)
+    if op_lower == 'all_gather':
+        out_shape[dim] *= num_devices
+    elif op_lower == 'all_reduce' or op_lower == 'reduce_scatter':
+        # Agar tumhare workload ko sharded output chahiye (mixtral logic)
+        if out_shape[dim] % num_devices == 0:
+            out_shape[dim] //= num_devices
+    
+    out_tensor = SimTensor({
+        'name': f"{name}.out",
+        'shape': out_shape,
+        'dtype': in_tensor.dtype,
+        'op_out': [name]
+    })
+
+    # 3. Perf Accounting (Rama's Stats)
+    freq_mhz = 1000.0
+    ideal_cycles = int(latency_ms * freq_mhz)
+    ideal_cycles = int(latency_ms * freq_mhz)
+    print(f"[CCLOpHandle] name={name}, latency_ms={latency_ms:.6f}, ideal_cycles={ideal_cycles}")
+    print(f"[CCLOpHandle] mem_rd={ideal_cycles//2}, mem_wr={ideal_cycles//2}")
+
+
+    out_tensor.perf_stats = {
+        'op_type': optype,
+        'inActCount': int(in_tensor.nelems()),
+        'outActCount': int(out_tensor.nelems()),
+        'inBytes': int(in_tensor.nelems() * bpe),
+        'outBytes': int(out_tensor.nelems() * bpe),
+        'ideal_cycles': ideal_cycles,
+        'compute_cycles': 0,
+        'mem_rd_cycles': ideal_cycles // 2,
+        'mem_wr_cycles': ideal_cycles // 2,
+        'instrs': {
+            'add': int(in_tensor.nelems() * (num_devices - 1)) if 'reduce' in op_lower else 0,
+            'load': int(in_tensor.nelems()), 
+            'store': int(out_tensor.nelems())
+        }
+    }
+    
+    return out_tensor
+ 
