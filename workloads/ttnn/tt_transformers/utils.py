@@ -75,6 +75,12 @@ def nlp_create_qkv_heads_decode(
     """
     batch_dim, seq_len, batch, fused_dim = xqkv_fused.shape
     head_dim = fused_dim // (num_heads + 2 * num_kv_heads)
+    print(f"[DEBUG] nlp_create_qkv_heads_decode:")
+    print(f"  fused_dim: {fused_dim}, num_heads: {num_heads}, num_kv_heads: {num_kv_heads}")
+    print(f"  calculated head_dim: {head_dim}")
+    print(f"  expected head_dim should be 128")  
+
+
     q_end = num_heads * head_dim
     k_end = q_end + num_kv_heads * head_dim
     assert head_dim * (num_heads + 2 * num_kv_heads) == fused_dim, \
@@ -89,12 +95,15 @@ def nlp_create_qkv_heads_decode(
     v = Tensor(shape=v_shape, device=xqkv_fused.device, dtype=DataType.from_numpy(xqkv_fused.dtype))
 
     # Reshape Q: [batch, seq_len, num_heads * head_dim] -> [1, batch, num_heads, head_dim]
-    q = ttnn.reshape(q, (batch, num_heads, head_dim)).unsqueeze(0)  # Add a dimension for decode mode
+   # q = ttnn.reshape(q, (batch, num_heads, head_dim)).unsqueeze(0)  # Add a dimension for decode mode
 
     # Reshape K, V: [batch, seq_len, num_kv_heads * head_dim] -> [1, batch, num_kv_heads, head_dim]
-    k = ttnn.reshape(k, (batch, num_kv_heads, head_dim)).unsqueeze(0)  # Add a dimension for decode mode
-    v = ttnn.reshape(v, (batch, num_kv_heads, head_dim)).unsqueeze(0)  # Add a dimension for decode mode
-
+   # k = ttnn.reshape(k, (batch, num_kv_heads, head_dim)).unsqueeze(0)  # Add a dimension for decode mode
+   # v = ttnn.reshape(v, (batch, num_kv_heads, head_dim)).unsqueeze(0)  # Add a dimension for decode mode
+    q = ttnn.reshape(q, (batch, seq_len, num_heads, head_dim))
+    k = ttnn.reshape(k, (batch, seq_len, num_kv_heads, head_dim))
+    print(f"  q_end: {q_end}, k_end: {k_end}")
+    v = ttnn.reshape(v, (batch, seq_len, num_kv_heads, head_dim))
     return q, k, v
 
 import math as mth
@@ -107,6 +116,7 @@ def rotary_embedding_llama(
     is_decode_mode=False,
 ):
     """
+    print(f"[DEBUG] rotary_embedding - x shape: {x.shape}, cos shape: {cos.shape}, sin shape: {sin.shape}")
     Applies rotary embedding to the input tensor using the formula:
     output = x * cos + (x @ trans_mat) * sin
 

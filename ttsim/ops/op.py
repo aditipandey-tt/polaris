@@ -175,17 +175,20 @@ def CCLOpHandle(name, optype, in_tensor, num_devices, latency_ms, dim=3):
     # 2. Universal Sharding Logic (Purane CCL logic ke hisaab se)
     if op_lower == 'all_gather':
         out_shape[dim] *= num_devices
-    elif op_lower == 'all_reduce' or op_lower == 'reduce_scatter':
+    elif op_lower == 'reduce_scatter':
         # Agar tumhare workload ko sharded output chahiye (mixtral logic)
         if out_shape[dim] % num_devices == 0:
             out_shape[dim] //= num_devices
-    
+    elif op_lower == 'all_reduce':
+        pass
     out_tensor = SimTensor({
         'name': f"{name}.out",
         'shape': out_shape,
         'dtype': in_tensor.dtype,
         'op_out': [name]
     })
+    if hasattr(in_tensor, 'device'):
+        out_tensor.device = in_tensor.device
 
     # 3. Perf Accounting (Rama's Stats)
     freq_mhz = 1000.0

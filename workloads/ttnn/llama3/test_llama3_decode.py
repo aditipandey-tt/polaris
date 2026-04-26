@@ -5,31 +5,38 @@
 import os, sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 import ttsim.front.ttnn as ttnn
-from workloads.ttnn.llama3.model import Transformer
-from workloads.ttnn.llama3.model_config import ModelArgs
+from workloads.ttnn.tt_transformers.model import Transformer
+from workloads.ttnn.tt_transformers.model_config import ModelArgs
 from ttsim.front.ttnn.device import Device as TTNNDevice
 from loguru import logger
 from ttsim.utils.common import setup_logger
 
 # def filter_ttnn_attrs(attrs_dict):
 #     return {k: v for k, v in attrs_dict.items() if not (isinstance(v, ttnn.Tensor) or k == "layout" or k == "memory_config")}
+
+# def create_mesh_device(single_device, num_devices=8):
+#    """Create a mesh device for tensor parallelism simulation."""
+#    class MeshDevice:
+#        def __init__(self, device, num_devices):
+ #           self.device = device
+  #          self.num_devices = num_devices
+   #         self.shape = [1, num_devices]  # 1x8 mesh for tensor parallelism
+            
+    #    def get_num_devices(self):
+     #       return self.num_devices
+            
+      #  def __getattr__(self, name):
+            # Delegate all other attributes to the underlying device
+       #     return getattr(self.device, name)
+    
+   # return MeshDevice(single_device, num_devices)
 def create_mesh_device(single_device, num_devices=8):
     """Create a mesh device for tensor parallelism simulation."""
-    class MeshDevice:
-        def __init__(self, device, num_devices):
-            self.device = device
-            self.num_devices = num_devices
-            self.shape = [1, num_devices]  # 1x8 mesh for tensor parallelism
-            
-        def get_num_devices(self):
-            return self.num_devices
-            
-        def __getattr__(self, name):
-            # Delegate all other attributes to the underlying device
-            return getattr(self.device, name)
-    
-    return MeshDevice(single_device, num_devices)
-
+    # Simply modify the existing device instead of wrapping it
+    single_device.num_devices = num_devices
+    single_device.shape = [1, num_devices]
+    single_device.get_num_devices = lambda: num_devices
+    return single_device
 
 def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
     assert isinstance(ttnn_device, TTNNDevice), "ttnn_device must be a TTNNDevice"
@@ -81,12 +88,13 @@ def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
     generation_length = iterations
     page_table_tt = None
     paged_attention_config = None
-    if not hasattr(ttnn_device, 'get_num_devices'):
-        ttnn_device.get_num_devices = lambda: 8
+    mesh_device = create_mesh_device(ttnn_device, num_devices=8)
+    model_args.num_devices = 8
+
     # Load TTNN model
     tt_model = Transformer(
         args=model_args,
-        mesh_device=ttnn_device,
+        mesh_device=mesh_device,
         dtype=dtype,
         state_dict=state_dict,
         weight_cache_path=None, #model_args.weight_cache_path(dtype),
@@ -98,19 +106,19 @@ def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
     batch = model_args.max_batch_size
 
     # Select the first token from the prompts for initial decoding
-    encoded_prompts_tensor = ttnn._rand(shape=(len(encoded_prompts), batch), device=ttnn_device, dtype=ttnn.int32)
+    encoded_prompts_tensor = ttnn._rand(shape=(len(encoded_prompts), batch), device=mesh_device, dtype=ttnn.int32)
     tt_decode_input = tt_model.embd(encoded_prompts_tensor).view(seqlen, batch, -1)
 
     # Initial positions
     generation_pos = [generation_start_pos for _ in range(batch)]
-    current_pos = ttnn._rand(shape=(len(generation_pos),), device=ttnn_device, dtype=ttnn.int32)
+    current_pos = ttnn._rand(shape=(len(generation_pos),), device=mesh_device, dtype=ttnn.int32)
     current_pos = current_pos.unsqueeze(0)
     current_pos_tensor = ttnn.from_torch(
         current_pos,
-        device=ttnn_device,
+        device=mesh_device,
         dtype=ttnn.int32,
         mesh_mapper=ttnn.ShardTensor2dMesh(
-            ttnn_device,
+            mesh_device,
             dims=(None, 0) if (model_args.is_galaxy and batch_size > 1) else (None, None),
             mesh_shape=model_args.cluster_shape,
         ),
@@ -131,8 +139,8 @@ def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
             mode="decode",
             page_table=page_table_tt,
         )
-        tt_output_torch = ttnn.permute(ttnn.to_torch(tt_out), (1, 2, 0, 3)).squeeze(2)#[: model_args.max_batch_size, 0:1, : model_args.vocab_size]
-        
+       #tt_output_torch = ttnn.permute(ttnn.to_torch(tt_out), (1, 2, 0, 3)).squeeze(2)#[: model_args.max_batch_size, 0:1, : model_args.vocab_size]
+        tt_output_torch = tt_out
         if (tt_output_torch.shape == [batch_size, seqlen, 128256]): # 128256 is the vocab_size for llama3 8B and llama3 3B, 1B
             logger.info(f'tt_output_torch is correctly shaped: {tt_output_torch.shape}')
         else:
@@ -148,11 +156,13 @@ def run_llama3(wlname: str, ttnn_device: TTNNDevice, cfg: dict):
 
 
 if __name__ == "__main__":
+    setup_logger("DEBUG")
     if len(sys.argv) > 1:
         model_name = sys.argv[1]
     else:
         model_name = "llama3-3B"
     ttnn_device = ttnn.open_device(device_id=0)
-    run_llama3(wlname='llama3', ttnn_device=ttnn_device, cfg={'model_name': model_name, 'bs': 1})
+    mesh_device = create_mesh_device(ttnn_device, num_devices=8)
+    run_llama3(wlname='llama3', ttnn_device=mesh_device, cfg={'model_name': model_name, 'bs': 1})
     ttnn.close_device(ttnn_device)
  

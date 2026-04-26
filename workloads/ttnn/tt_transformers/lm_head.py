@@ -139,6 +139,13 @@ class LMHead():
             ]
 
     def forward(self, x: ttnn.Tensor):
+        print(f"[DEBUG] lm_head input shape: {x.shape}")
+        print(f"[DEBUG] lm_head weight shape: {self.weight.shape if hasattr(self, 'weight') else 'No self.weight'}")
+        if hasattr(self, 'output_weights'):
+            print(f"[DEBUG] lm_head has output_weights: {len(self.output_weights)} weights")
+            if self.output_weights:
+                print(f"[DEBUG] First weight shape: {self.output_weights[0].shape}")
+    
         outputs = []
         for weight, pc in zip(self.output_weights, self.program_configs):
             output = ttnn.linear(

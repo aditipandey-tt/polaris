@@ -158,8 +158,9 @@ class Transformer():
 
         # if mode == "prefill" and self.model_config["LM_HEAD_INPUT_MEMCFG"].is_sharded():
         #     x = ttnn.interleaved_to_sharded(x, self.model_config["LM_HEAD_INPUT_MEMCFG"])
-
-        x = ccl.all_reduce(x, self.mesh_device, dim=3)
+        print(f"[DEBUG] Before all_gather - x.shape: {x.shape}")
+#         x = ccl.all_gather(x, self.mesh_device, dim=3)
+        print(f"[DEBUG] After all_gather - x.shape: {x.shape}")
         x = self.lm_head(x)
 
         if mode == "prefill":

@@ -9,13 +9,21 @@ from ttsim.front.ttnn.tensor import DataType
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 import ttsim.front.ttnn as ttnn
 import workloads.ttnn.tt_transformers.utils as utils
+import ttsim.front.functional.ccl as ccl
+#def tt_all_reduce(tensor, *args, **kwargs):
+ #   return tensor
 
-def tt_all_reduce(tensor, *args, **kwargs):
-    return tensor
+#def tt_all_gather(input_tensor, *args, **kwargs):
+ #   return input_tensor
+def tt_all_reduce(tensor, mesh_device=None, *args, **kwargs):
+    if mesh_device is None:
+        return tensor
+    return ccl.all_reduce(tensor, mesh_device, *args, **kwargs)
 
-def tt_all_gather(input_tensor, *args, **kwargs):
-    return input_tensor
-
+def tt_all_gather(input_tensor, mesh_device=None, *args, **kwargs):
+    if mesh_device is None:
+        return input_tensor
+    return ccl.all_gather(input_tensor, mesh_device, *args, **kwargs)
 class OpGroup(Enum):
     """
     LI_* are linear operator groups
@@ -80,6 +88,7 @@ class Attention():
         )
 
         self.n_local_heads = self.n_heads // self.num_devices_per_group
+        print(f"[DEBUG] Attention init - n_heads={self.n_heads}, num_devices_per_group={self.num_devices_per_group}, n_local_heads={self.n_local_heads}")
         self.n_local_kv_heads = self.n_kv_heads // self.num_devices_per_group
 
         self.arch_name = configuration.arch_name
@@ -135,20 +144,28 @@ class Attention():
 
         wqkv_mem_config = None #dummy
 
-        qkv_list = []
-        for i in range(self.num_devices_per_group):
-            wq = ttnn._rand((self.hidden_size, self.head_dim * self.n_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
-            wk = ttnn._rand((self.hidden_size, self.head_dim * self.n_kv_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
-            wv = ttnn._rand((self.hidden_size, self.head_dim * self.n_kv_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
+        #qkv_list = []
+       # for i in range(self.num_devices_per_group):
+        #    wq = ttnn._rand((self.hidden_size, self.head_dim * self.n_local_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
+         #   wk = ttnn._rand((self.hidden_size, self.head_dim * self.n_local_kv_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
+          #  wv = ttnn._rand((self.hidden_size, self.head_dim * self.n_local_kv_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
 
-            qkv = ttnn.cat([wq, wk, wv], dim=-1)
-            qkv_list.append(qkv)
 
-        if self.moe:
-            qkv_cat = qkv_list[0].unsqueeze(0).unsqueeze(0) # For MOE, do not concat weights across experts, as each expert will select its own weights
-        else:
-            qkv_cat = ttnn.cat(qkv_list, dim=-1).unsqueeze(0).unsqueeze(0)
 
+           # qkv = ttnn.cat([wq, wk, wv], dim=-1)
+            #qkv_list.append(qkv)
+
+       # if self.moe:
+        #    qkv_cat = qkv_list[0].unsqueeze(0).unsqueeze(0) # For MOE, do not concat weights across experts, as each expert will select its own weights
+       # else:
+        #    qkv_cat = ttnn.cat(qkv_list, dim=-1).unsqueeze(0).unsqueeze(0)
+
+        wq = ttnn._rand((self.hidden_size, self.head_dim * self.n_local_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
+        wk = ttnn._rand((self.hidden_size, self.head_dim * self.n_local_kv_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
+        wv = ttnn._rand((self.hidden_size, self.head_dim * self.n_local_kv_heads // self.num_experts), device=self.mesh_device, dtype=ttnn.bfloat16)
+        qkv = ttnn.cat([wq, wk, wv], dim=-1)
+
+        qkv_cat = qkv.unsqueeze(0).unsqueeze(0)
         self.wqkv = ttnn.as_tensor(
             qkv_cat,
             dtype=self.wqkv_dtype,
@@ -272,23 +289,35 @@ class Attention():
             xqkv_fused_sharded = xqkv_fused_sharded + self.wqkv_bias_decode[num_tiles - 1]
 
         ttnn.deallocate(x)
+        print(f"[DEBUG] Before first all_reduce - xqkv_fused_sharded shape: {xqkv_fused_sharded.shape}")
         xqkv_fused = tt_all_reduce(
             xqkv_fused_sharded,
             self.mesh_device,
             cluster_axis=1,
             num_reduce_scatter_links=self.num_reduce_scatter_links,
             num_all_gather_links=self.num_all_gather_links,
-            memory_config=None, #self.model_config["QKV_OUT_GATHERED_MEMCFG"](list(self.mesh_device.shape)[1]),
+            memory_config=None,
             sharded=True,
             dtype=self.ccl_dtype,
             topology=self.ccl_topology,
-        )
+)       
+
+    
+        print(f"[DEBUG] After first all_reduce - xqkv_fused shape: {xqkv_fused.shape}")
         ttnn.deallocate(xqkv_fused_sharded)
+
         # Reshape such that true unpadded batch is tracked in shape
         fqkv_shape = xqkv_fused.shape
+        print(f"[DEBUG] Before reshape - xqkv_fused shape: {xqkv_fused.shape}")
+        print(f"[DEBUG] batch_size_per_device_group: {self.batch_size_per_device_group}")
+        print(f"[DEBUG] fqkv_shape[3]: {fqkv_shape[3]}")
         xqkv_fused = ttnn.reshape(
             xqkv_fused, (1, 1, self.batch_size_per_device_group, fqkv_shape[3]), (1, 1, 32, fqkv_shape[3])
         )
+       
+
+        print(f"[DEBUG] After reshape - xqkv_fused shape: {xqkv_fused.shape}")
+        print(f"[DEBUG] Expected dims - n_local_heads: {self.n_local_heads}, n_local_kv_heads: {self.n_local_kv_heads}, head_dim: {self.head_dim}")
 
         (
             q_heads_pre_rot_1BQD,
@@ -300,11 +329,16 @@ class Attention():
             num_kv_heads=self.n_local_kv_heads,
             memory_config=None, #self.model_config["CREATE_QKV_DECODE_SHARD"],
         )
-
+        print(f"[DEBUG] After nlp_create_qkv_heads_decode - q shape: {q_heads_pre_rot_1BQD.shape}, k shape: {k_heads_pre_rot_1BKD.shape}, v shape: {v_heads_1BKD.shape}")
         q_heads_pre_rot_1BQD = self.q_norm(q_heads_pre_rot_1BQD, mode="decode")
         k_heads_pre_rot_1BKD = self.k_norm(k_heads_pre_rot_1BKD, mode="decode")
         ttnn.deallocate(xqkv_fused)
+        
 
+
+        print(f"[DEBUG] q_heads_pre_rot_1BQD shape: {q_heads_pre_rot_1BQD.shape}")
+        print(f"[DEBUG] rot_mats[0] shape: {rot_mats[0].shape}")
+        print(f"[DEBUG] rot_mats[1] shape: {rot_mats[1].shape}")
         # Q Rotary Embeddings
         q_heads_1BQD = utils.rotary_embedding_llama(
             q_heads_pre_rot_1BQD, rot_mats[0], rot_mats[1], self.transformation_mats["decode"], is_decode_mode=True
@@ -367,11 +401,12 @@ class Attention():
             attn_output_1G4D,
             memory_config=None #self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"](self.batch_size_per_device_group),
         )
-
+        print(f"[DEBUG] Before concat heads - attn_output_11BH shape: {attn_output_11BH.shape}, n_local_heads={self.n_local_heads}")
         attn_output_cat = utils.nlp_concat_heads_decode(
             attn_output_11BH,
             num_heads=self.n_local_heads,
         )
+        print(f"[DEBUG] After concat heads - attn_output_cat shape: {attn_output_cat.shape}")
         ttnn.deallocate(attn_output_11BH)
         ttnn.deallocate(attn_output_1G4D)
 
@@ -395,6 +430,7 @@ class Attention():
             return dense_out_sharded
 
         else:
+            print(f"[DEBUG] Before all_gather - attn_output_cat shape: {attn_output_cat.shape if hasattr(attn_output_cat, 'shape') else 'no shape'}")
             attn_output = tt_all_gather(
                 attn_output_cat,
                 self.mesh_device,
@@ -405,9 +441,11 @@ class Attention():
                 sharded=True,
                 # dtype=self.ccl_dtype,  # Running bf16 until we have SDPA output bfp8 df; otherwise we have two sharded to interleaved/interleaved to sharded conversions
             )
+            print(f"[DEBUG] After all_gather - attn_output shape: {attn_output.shape if hasattr(attn_output, 'shape') else 'no shape'}")
 
             attn_output = ttnn.cat([attn_output] * self.num_experts, dim=-1)
             gather_wo = ttnn.repeat(self.wo, [1, 1, 1, self.num_experts])
+            print(f"[DEBUG] Before matmul - attn_output shape: {attn_output.shape}, gather_wo shape: {gather_wo.shape if hasattr(gather_wo, 'shape') else 'no shape'}")
             dense_out_sharded = ttnn.matmul(
                 attn_output,
                 gather_wo
