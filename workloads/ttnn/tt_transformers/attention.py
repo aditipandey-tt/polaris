@@ -260,7 +260,6 @@ class Attention():
             )
             for k_or_v in [cache_k, cache_v]
         ]
-
     def forward_decode(
         self,
         x: ttnn.Tensor,
@@ -431,6 +430,11 @@ class Attention():
 
         else:
             print(f"[DEBUG] Before all_gather - attn_output_cat shape: {attn_output_cat.shape if hasattr(attn_output_cat, 'shape') else 'no shape'}")
+            print(f"[DEBUG] mesh_device shape: {self.mesh_device.get_shape() if hasattr(self.mesh_device, 'get_shape') else 'unknown'}")
+            print(f"[DEBUG] num_devices: {self.num_devices}")
+            print(f"[DEBUG] num_devices_per_group: {self.num_devices_per_group}")
+            print(f"[DEBUG] Expected gather size: {attn_output_cat.shape[-1] * self.num_devices_per_group}")
+    
             attn_output = tt_all_gather(
                 attn_output_cat,
                 self.mesh_device,

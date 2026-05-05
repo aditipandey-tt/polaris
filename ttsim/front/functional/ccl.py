@@ -9,6 +9,14 @@ def get_num_devices(mesh_device):
     """Dynamically determine the number of chips in the mesh."""
     if hasattr(mesh_device, 'shape'):
         return mesh_device.shape[0] * mesh_device.shape[1]
+    import sys
+    cmd_line = ' '.join(sys.argv)
+    if '--filterarch n300' in cmd_line or 'n300' in cmd_line:
+        return 2
+    elif '--filterarch n150' in cmd_line or 'n150' in cmd_line:
+        return 1
+    elif '--filterarch n800' in cmd_line or 'n800' in cmd_line:
+        return 8
     return 8 
 
 def all_reduce(tensor, mesh_device, cluster_axis=0, dim=3, **kwargs):
@@ -76,9 +84,9 @@ def all_gather(tensor, mesh_device, cluster_axis=0, dim=3, **kwargs):
     num_devices = get_num_devices(mesh_device)
     nelems_val = tensor.nelems() # Variable define kiya
     in_bytes = nelems_val * 2
-    latency_ms = (in_bytes * (num_devices - 1) / (1024**3) / 7.0) * 1000
+    traffic_bytes = in_bytes * (num_devices - 1)
+    latency_ms = (traffic_bytes / (1024**3) / 7.0) * 1000
     target_cycles = int(latency_ms * 1000)
-
     in_name = getattr(tensor, 'name', 'unknown_in')
     match = re.search(r'Op_(\d+)', in_name)
     if match:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# !/usr/bin/env python
 # SPDX-FileCopyrightText: (C) 2025 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
  
@@ -59,6 +59,9 @@ class ModelArgs:
             self.vocab_size = 152064
             self.norm_eps = 1e-6
             self.hidden_size = 3584
+            self.num_devices = 2
+            self.cluster_shape = [1, 2]
+
         elif "mixtral" in name_lower:
             self.model_name = "mixtral-8x7B"
             self.dim = 4096
