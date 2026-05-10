@@ -448,3 +448,11 @@ workloads:
     module : run_vit_perf_device@test_vit_device_perf_bh.py
     instances:
       vitoptim_bh_b16_perf_report: { bs: 10, model_name: vitoptim-bh-b16-perf-report }
+
+
+  - api: TTSIM
+    name: mnist_training
+    basedir: workloads
+    module: MNISTTraining@mnist_training_port.py
+    instances:
+      mnist_base: { bs: 64, learning_rate: 0.01 }

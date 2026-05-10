@@ -5,7 +5,6 @@ import numpy as np
 from functools import lru_cache, partial
 from itertools import count as _count
 from typing import Union, Iterator, Any
-
 from loguru import logger
 from ttsim.graph import WorkloadGraph
 from ttsim.ops import SimOp, SimTensor
@@ -1199,3 +1198,126 @@ def Constant(name_or_value, value=None, shape=None, dtype=None, **kwargs):
     # Since Constant is a generator op with no inputs
     const_tensor = _from_data(name + '.const', data, is_const=True)
     return const_tensor
+
+
+# ============================================================================
+# Training Support Operations - Added for MNIST training support
+# Author: Aditi Pandey
+# ============================================================================
+
+# Backward operations using the existing operator pattern
+
+# Using UnaryOperator, BinaryOperator, TernaryOperator patterns
+ReluBackward = partial(BinaryOperator, optype="ReluBackward")  # grad_output, input -> grad_input
+TanhBackward = partial(BinaryOperator, optype="TanhBackward")
+SigmoidBackward = partial(BinaryOperator, optype="SigmoidBackward")
+
+# Pooling backward
+MaxPool2dBackward = partial(TernaryOperator, optype="MaxPool2dBackward")  # grad_output, input, indices -> grad_input
+AvgPool2dBackward = partial(BinaryOperator, optype="AvgPool2dBackward")  # grad_output, input -> grad_input
+
+# Loss backward
+SoftmaxCrossEntropyBackward = partial(BinaryOperator, optype="SoftmaxCrossEntropyBackward")  # logits, labels -> grad_logits
+MSELossBackward = partial(BinaryOperator, optype="MSELossBackward")  # predictions, targets -> grad_predictions
+
+# Linear and Conv backward need more complex handling
+def LinearBackward(name, **kwargs):
+    """
+    Backward pass for Linear/Dense layer
+    Inputs: grad_output, input, weight -> grad_input, grad_weight, grad_bias
+    """
+    # Note: Added opos and num_outputs parameters
+    return MultiOutputSimOpHandle(name, "LinearBackward", params=[], 
+                                  ipos=[0, 1, 2], opos=[0, 1, 2], 
+                                  num_outputs=3, **kwargs)
+
+def Conv2dBackward(name, kernel_size, stride=1, padding=0, **kwargs):
+    """
+    Backward pass for Conv2d layer  
+    Inputs: grad_output, input, weight -> grad_input, grad_weight
+    """
+    kwargs.update({'kernel_size': kernel_size, 'stride': stride, 'padding': padding})
+    return MultiOutputSimOpHandle(name, "Conv2dBackward", params=[], 
+                                  ipos=[0, 1, 2], opos=[0, 1], 
+                                  num_outputs=2, **kwargs)
+
+def BatchNorm2dBackward(name, **kwargs):
+    """
+    Backward pass for BatchNorm2d
+    Inputs: grad_output, input, mean, var, weight -> grad_input, grad_weight, grad_bias
+    """
+    return SimOpHandle(name, "BatchNorm2dBackward", params=[], ipos=[0, 1, 2, 3, 4], **kwargs)
+
+# Optimizer operations
+
+def SGDUpdate(name, learning_rate=0.01, momentum=0.0, weight_decay=0.0, **kwargs):
+    """
+    SGD weight update: w = w - lr * grad
+    With momentum: v = momentum * v + grad; w = w - lr * v
+    """
+    # Create learning rate as constant using _from_data (like MulFixed does)
+    lr_const = _from_data(name + ".lr", data=np.array([learning_rate], dtype=np.float32), is_const=True)
+    lr_const.op_in.append(name)
+    
+    params = [(2, lr_const)]
+    
+    if momentum > 0:
+        mom_const = _from_data(name + ".momentum", data=np.array([momentum], dtype=np.float32), is_const=True)
+        mom_const.op_in.append(name)
+        params.append((3, mom_const))
+        
+    if weight_decay > 0:
+        wd_const = _from_data(name + ".weight_decay", data=np.array([weight_decay], dtype=np.float32), is_const=True)
+        wd_const.op_in.append(name)
+        params.append((4, wd_const))
+    
+    return SimOpHandle(name, "SGDUpdate", params=params, ipos=[0, 1], **kwargs)
+
+def AdamUpdate(name, learning_rate=0.001, beta1=0.9, beta2=0.999, eps=1e-8, **kwargs):
+    """
+    Adam optimizer update
+    Inputs: weight, gradient, m (first moment), v (second moment), timestep
+    """
+    # Create constant tensors using _from_data (like MulFixed pattern)
+    lr_const = _from_data(name + ".lr", data=np.array([learning_rate], dtype=np.float32), is_const=True)
+    lr_const.op_in.append(name)
+    
+    beta1_const = _from_data(name + ".beta1", data=np.array([beta1], dtype=np.float32), is_const=True)
+    beta1_const.op_in.append(name)
+    
+    beta2_const = _from_data(name + ".beta2", data=np.array([beta2], dtype=np.float32), is_const=True)
+    beta2_const.op_in.append(name)
+    
+    eps_const = _from_data(name + ".eps", data=np.array([eps], dtype=np.float32), is_const=True)
+    eps_const.op_in.append(name)
+    
+    params = [
+        (1, lr_const),
+        (2, beta1_const),
+        (3, beta2_const),
+        (4, eps_const)
+    ]
+    
+    return SimOpHandle(name, "AdamUpdate", params=params, ipos=[0, 1, 2, 3, 4], **kwargs)
+
+# Gradient operations
+GradientClip = partial(BinaryOperator, optype="GradientClip")  # gradient, max_norm -> clipped_gradient
+GradientAccumulate = partial(BinaryOperator, optype="GradientAccumulate")  # old_grad, new_grad -> accumulated_grad
+ZeroGradient = partial(UnaryOperator, optype="ZeroGradient")  # tensor -> zeros_like(tensor)
+
+# Training utilities
+def Dropout2d(name, p=0.5, training=True, **kwargs):
+    """Dropout for training"""
+    kwargs['p'] = p
+    kwargs['training'] = training
+    return SimOpHandle(name, "Dropout2d", params=[], ipos=[0], **kwargs)
+
+# Composite training operations
+def TrainingStep(name, **kwargs):
+    """
+    Represents a complete training step (forward + backward + update)
+    This is a meta-operation for organizing the training DAG
+    """
+    return SimOpHandle(name, "TrainingStep", params=[], ipos=[0, 1], **kwargs)  # inputs, labels
+
+

@@ -41,7 +41,7 @@ op_fusion_spec:
 
 op_rsrc_spec:
   compute:
-    matrix: [Matmul, Conv, ConvTranspose, Gemm, MultiheadAttention]
+    matrix: [Matmul, Conv, ConvTranspose, Gemm, MultiheadAttention, LinearBackward, Conv2dBackward]
     vector: [Add, And, ArgMax, AveragePool,
              BatchNormalization,
              Cast, Clip, Concat, Constant, ConstantOfShape, Cos, CumSum,
@@ -52,12 +52,12 @@ op_rsrc_spec:
              HardSigmoid, Hardswish,
              Identity, If, InterleavedToSharded, IsNaN,
              LayerNormalization, LeakyRelu, Log, Less,
-             Max, MaxPool, Mean, Min, Mish, Mul,
+             Max, MaxPool, MaxPool2dBackward, Mean, Min, Mish, Mul,
              Neg, ConcatHeads, CreateQKVHeads, NonMaxSuppression, NonZero, # transformer head ops from ttnn_shim
              Pad, Permute, Pow,
              QuantizeLinear,
-             Reciprocal, ReduceMax, ReduceMean, ReduceMin, ReduceProd, ReduceSum, Relu, Reshard, Reshape, Resize,
-             ScatterND, ScatterElements, Shape, ShardedToInterleaved, Sigmoid, Sin, Slice, Softmax, SoftmaxCrossEntropyLoss, Softplus, Split, Sqrt, Squeeze, Sub, Sum,
+             Reciprocal, ReduceMax, ReduceMean, ReduceMin, ReduceProd, ReduceSum, Relu, ReluBackward,  Reshard, Reshape, Resize,
+             ScatterND, ScatterElements, SGDUpdate, Shape, ShardedToInterleaved, Sigmoid, Sin, Slice, Softmax, SoftmaxCrossEntropyBackward, SoftmaxCrossEntropyLoss, Softplus, Split, Sqrt, Squeeze, Sub, Sum,
              Tanh, Tile, Tilize, TilizeWithValPadding, TopK, TorchGather, Transpose, Trilu,
              Unsqueeze, Untilize, UntilizeWithUnpadding, Upsample,
              VoxelPooling,
